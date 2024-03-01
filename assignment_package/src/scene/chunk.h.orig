@@ -1,0 +1,163 @@
+#pragma once
+#include "smartpointerhelp.h"
+#include "glm_includes.h"
+#include "drawable.h"
+#include <array>
+#include <unordered_map>
+#include <cstddef>
+
+#include "terraingen.h"
+
+//using namespace std;
+
+
+
+// C++ 11 allows us to define the size of an enum. This lets us use only one byte
+// of memory to store our different block types. By default, the size of a C++ enum
+// is that of an int (so, usually four bytes). This *does* limit us to only 256 different
+// block types, but in the scope of this project we'll never get anywhere near that many.
+enum BlockType : unsigned char
+{
+    EMPTY, GRASS, DIRT, STONE, WATER, SNOW, LAVA, BEDROCK, GLASS
+};
+
+// The six cardinal directions in 3D space
+enum Direction : unsigned char
+{
+    XPOS, XNEG, YPOS, YNEG, ZPOS, ZNEG
+};
+
+// Lets us use any enum class as the key of a
+// std::unordered_map
+struct EnumHash {
+    template <typename T>
+    size_t operator()(T t) const {
+        return static_cast<size_t>(t);
+    }
+};
+
+struct EnumPairHash {
+public:
+    template <typename T, typename U>
+    std::size_t operator()(const std::pair<T, U> &x) const
+    {
+        return EnumHash()(x.first) ^ EnumHash()(x.second);
+    }
+};
+
+struct BlockFace
+{
+    glm::vec3 direction;
+    std::array<glm::vec4, 4> pos;
+    std::array<glm::vec4, 4> nor;
+};
+
+struct BlockInfo {
+    std::unordered_map<Direction,glm::vec2,EnumHash> uv_map;
+    bool transparent;
+    float animated;
+};
+
+
+// One Chunk is a 16 x 256 x 16 section of the world,
+// containing all the Minecraft blocks in that area.
+// We divide the world into Chunks in order to make
+// recomputing its VBO data faster by not having to
+// render all the world at once, while also not having
+// to render the world block by block.
+
+class Chunk;
+class Terrain;
+
+struct ChunkVBOData
+{
+    Chunk* chunk;
+    std::vector<glm::vec4> vboDataOpaque, vboDataTransparent;
+    std::vector<GLuint> idxDataOpaque, idxDataTransparent;
+
+    ChunkVBOData(Chunk* c) :
+        chunk(c), vboDataOpaque{}, vboDataTransparent{}, idxDataOpaque{}, idxDataTransparent{}
+    {}
+};
+
+
+struct ChunkVBOData
+{
+    Chunk* chunk;
+    std::vector<glm::vec4> vboDataOpaque, vboDataTransparent;
+    std::vector<GLuint> idxDataOpaque, idxDataTransparent;
+
+    ChunkVBOData(Chunk* c) :
+        chunk(c), vboDataOpaque{}, vboDataTransparent{}, idxDataOpaque{}, idxDataTransparent{}
+    {}
+};
+
+class DrawableChunk : public Drawable {
+    friend class Chunk;
+    friend class Terrain;
+private:
+    bool ptrsValid;
+    std::vector<glm::vec4>* vbo;
+    std::vector<GLuint>* idx;
+    unsigned int* count;
+
+    void loadVBOdata(std::vector<glm::vec4>* vbo, std::vector<GLuint>* idx, unsigned int* count);
+    virtual void createVBOdata();
+public:
+    DrawableChunk(OpenGLContext* mp_context);
+};
+
+// TODO have Chunk inherit from Drawable
+class Chunk {
+private:
+    // All of the blocks contained within this Chunk
+    std::array<BlockType, 65536> m_blocks;
+    int minX, minZ;
+    // This Chunk's four neighbors to the north, south, east, and west
+    // The third input to this map just lets us use a Direction as
+    // a key for this map.
+    // These allow us to properly determine
+    std::unordered_map<Direction, Chunk*, EnumHash> m_neighbors;
+
+<<<<<<< HEAD
+    bool VBODataLoaded;
+
+    uPtr<ChunkVBOData> chunkData;
+=======
+    ChunkVBOData cData;
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+
+public:
+    Chunk(OpenGLContext* mp_context);
+    Chunk(OpenGLContext* mp_context, int x, int z);
+
+    DrawableChunk opaque;
+    DrawableChunk transparent;
+
+    BlockType getBlockAt(unsigned int x, unsigned int y, unsigned int z) const;
+    BlockType getBlockAt(int x, int y, int z) const;
+    void setBlockAt(unsigned int x, unsigned int y, unsigned int z, BlockType t);
+    void linkNeighbor(uPtr<Chunk>& neighbor, Direction dir);
+
+    // VBO methods:
+    void createVBOData();
+//    void unravelVBO(std::vector<glm::vec4> &vbo, std::vector<GLuint> &idx,
+//                    std::vector<glm::vec4> &pos, std::vector<glm::vec4> &col, std::vector<glm::vec4> &nor, std::vector<glm::vec4>& uv);
+    const ChunkVBOData* getVBOData() const;
+    void destroyVBOData();
+    void resetVBOData();
+
+    // Helper methods:
+    void getNeighbor(int x, int y, int z, const BlockFace &n, BlockType &neighbor);
+
+    glm::ivec2 getMinPos();
+
+    BlockType getBlockByBiome(float height, bool onTop, BiomeType b);
+    void setChunkGenHeights();
+    void destroyVBOdata();
+    bool hasVBOData() const;
+    void setTrueVBOData();
+
+    ChunkVBOData* sendVBOData();
+};
+

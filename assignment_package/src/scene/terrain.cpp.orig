@@ -1,0 +1,436 @@
+#include "terrain.h"
+#include <stdexcept>
+#include <iostream>
+#include <thread>
+#include <mutex>
+
+Terrain::Terrain(OpenGLContext *context)
+    : m_chunks(), m_generatedTerrain(), mp_context(context),
+    chunks_needing_generated(), chunks_needing_generated_mutexes(),
+    chunks_needing_created(), chunks_needing_created_mutexes(),
+    created_chunks(), created_chunks_mutex(),
+    threads(),
+    terrain_timer(0.f), prev_pos(glm::vec3(48.f, 170.f, 48.f))
+{
+    for (int i = 0; i < NUM_CORES; i++)
+    {
+        threads.push_back(std::thread(multithread_work,
+                                      std::ref(chunks_needing_generated[i]), std::ref(chunks_needing_generated_mutexes[i]),
+                                      std::ref(chunks_needing_created[i]), std::ref(chunks_needing_created_mutexes[i]),
+                                      std::ref(this->created_chunks), std::ref(this->created_chunks_mutex)));
+    }
+}
+
+Terrain::~Terrain() {
+    for (int64_t key : m_generatedTerrain)
+    {
+<<<<<<< HEAD
+        m_chunks[key]->destroyVBOdata();
+=======
+        m_chunks[key]->destroyVBOData();
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+    }
+}
+
+// Array containing ivec2's representing the translation distance to each of the surrounding
+// 8 neighbors of a chunk. Starting from lower-left and moving CCW if x is vertical axis and z is horizontal axis
+const static std::array<glm::ivec2, 8> neighboring_chunks {
+    glm::ivec2(-16, -16), glm::ivec2(-16, 0), glm::ivec2(-16, 16),
+    glm::ivec2(0, 16), glm::ivec2(16, 16), glm::ivec2(16, 0),
+    glm::ivec2(16, -16), glm::ivec2(0, -16)
+};
+
+// Combine two 32-bit ints into one 64-bit int
+// where the upper 32 bits are X and the lower 32 bits are Z
+int64_t toKey(int x, int z) {
+    int64_t xz = 0xffffffffffffffff;
+    int64_t x64 = x;
+    int64_t z64 = z;
+
+    // Set all lower 32 bits to 1 so we can & with Z later
+    xz = (xz & (x64 << 32)) | 0x00000000ffffffff;
+
+    // Set all upper 32 bits to 1 so we can & with XZ
+    z64 = z64 | 0xffffffff00000000;
+
+    // Combine
+    xz = xz & z64;
+    return xz;
+}
+
+glm::ivec2 toCoords(int64_t k) {
+    // Z is lower 32 bits
+    int64_t z = k & 0x00000000ffffffff;
+    // If the most significant bit of Z is 1, then it's a negative number
+    // so we have to set all the upper 32 bits to 1.
+    // Note the 8    V
+    if(z & 0x0000000080000000) {
+        z = z | 0xffffffff00000000;
+    }
+    int64_t x = (k >> 32);
+
+    return glm::ivec2(x, z);
+}
+
+// Surround calls to this with try-catch if you don't know whether
+// the coordinates at x, y, z have a corresponding Chunk
+BlockType Terrain::getBlockAt(int x, int y, int z) const
+{
+    if(hasChunkAt(x, z)) {
+        // Just disallow action below or above min/max height,
+        // but don't crash the game over it.
+        if(y < 0 || y >= 256) {
+            return EMPTY;
+        }
+        const uPtr<Chunk> &c = getChunkAt(x, z);
+        glm::vec2 chunkOrigin = glm::vec2(floor(x / 16.f) * 16, floor(z / 16.f) * 16);
+        return c->getBlockAt(static_cast<unsigned int>(x - chunkOrigin.x),
+                             static_cast<unsigned int>(y),
+                             static_cast<unsigned int>(z - chunkOrigin.y));
+    }
+    else {
+        throw std::out_of_range("Coordinates " + std::to_string(x) +
+                                " " + std::to_string(y) + " " +
+                                std::to_string(z) + " have no Chunk!");
+    }
+}
+
+BlockType Terrain::getBlockAt(glm::vec3 p) const {
+    return getBlockAt(p.x, p.y, p.z);
+}
+
+bool Terrain::hasChunkAt(int x, int z) const {
+    // Map x and z to their nearest Chunk corner
+    // By flooring x and z, then multiplying by 16,
+    // we clamp (x, z) to its nearest Chunk-space corner,
+    // then scale back to a world-space location.
+    // Note that floor() lets us handle negative numbers
+    // correctly, as floor(-1 / 16.f) gives us -1, as
+    // opposed to (int)(-1 / 16.f) giving us 0 (incorrect!).
+    int xFloor = static_cast<int>(glm::floor(x / 16.f));
+    int zFloor = static_cast<int>(glm::floor(z / 16.f));
+    return m_chunks.find(toKey(16 * xFloor, 16 * zFloor)) != m_chunks.end();
+}
+
+
+uPtr<Chunk>& Terrain::getChunkAt(int x, int z) {
+    int xFloor = static_cast<int>(glm::floor(x / 16.f));
+    int zFloor = static_cast<int>(glm::floor(z / 16.f));
+    return m_chunks[toKey(16 * xFloor, 16 * zFloor)];
+}
+
+
+const uPtr<Chunk>& Terrain::getChunkAt(int x, int z) const {
+    int xFloor = static_cast<int>(glm::floor(x / 16.f));
+    int zFloor = static_cast<int>(glm::floor(z / 16.f));
+    return m_chunks.at(toKey(16 * xFloor, 16 * zFloor));
+}
+
+void Terrain::setBlockAt(int x, int y, int z, BlockType t)
+{
+    if(hasChunkAt(x, z)) {
+        uPtr<Chunk> &c = getChunkAt(x, z);
+        glm::vec2 chunkOrigin = glm::vec2(floor(x / 16.f) * 16, floor(z / 16.f) * 16);
+        c->setBlockAt(static_cast<unsigned int>(x - chunkOrigin.x),
+                      static_cast<unsigned int>(y),
+                      static_cast<unsigned int>(z - chunkOrigin.y),
+                      t);
+    }
+    else {
+        throw std::out_of_range("Coordinates " + std::to_string(x) +
+                                " " + std::to_string(y) + " " +
+                                std::to_string(z) + " have no Chunk!");
+    }
+}
+
+Chunk* Terrain::instantiateChunkAt(int x, int z) {
+    uPtr<Chunk> chunk = mkU<Chunk>(this->mp_context, x, z);
+    Chunk *cPtr = chunk.get();
+    m_chunks[toKey(x, z)] = move(chunk);
+    // Set the neighbor pointers of itself and its neighbors
+    if(hasChunkAt(x, z + 16)) {
+        auto &chunkNorth = m_chunks[toKey(x, z + 16)];
+        cPtr->linkNeighbor(chunkNorth, ZPOS);
+    }
+    if(hasChunkAt(x, z - 16)) {
+        auto &chunkSouth = m_chunks[toKey(x, z - 16)];
+        cPtr->linkNeighbor(chunkSouth, ZNEG);
+    }
+    if(hasChunkAt(x + 16, z)) {
+        auto &chunkEast = m_chunks[toKey(x + 16, z)];
+        cPtr->linkNeighbor(chunkEast, XPOS);
+    }
+    if(hasChunkAt(x - 16, z)) {
+        auto &chunkWest = m_chunks[toKey(x - 16, z)];
+        cPtr->linkNeighbor(chunkWest, XNEG);
+    }
+    return cPtr;
+    return cPtr;
+}
+
+// TODO: When you make Chunk inherit from Drawable, change this code so
+// it draws each Chunk with the given ShaderProgram, remembering to set the
+// model matrix to the proper X and Z translation!
+void Terrain::draw(int minX, int maxX, int minZ, int maxZ, ShaderProgram *shaderProgram) {
+    for (bool opaque : {true, false}) {
+        for (int x = minX; x < maxX; x += 16)
+        {
+            for (int z = minZ; z < maxZ; z += 16)
+            {
+                const uPtr<Chunk> &chunk = getChunkAt(x, z);
+                if (chunk && chunk->hasVBOData())
+                {
+<<<<<<< HEAD
+                    shaderProgram->drawInterleaved((opaque) ? chunk->opaque : chunk->transparent);
+//                 if (hasChunkAt(x, z))
+//                 {
+//                     const uPtr<Chunk> &chunk = getChunkAt(x, z);
+//                     shaderProgram->setModelMatrix(glm::translate(glm::mat4(), glm::vec3(x, 0, z)));
+//
+=======
+                    const uPtr<Chunk> &chunk = getChunkAt(x, z);
+                    shaderProgram->setModelMatrix(glm::translate(glm::mat4(), glm::vec3(x, 0, z)));
+                    shaderProgram->drawInterleaved((opaque) ? chunk->opaque : chunk->transparent);
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+                }
+            }
+        }
+    }
+}
+
+void Terrain::CreateTestScene()
+{
+    // Create the Chunks that will
+    // store the blocks for our
+    // initial world space
+    for(int x = -16; x < 80; x += 16) {
+        for(int z = -16; z < 80; z += 16) {
+            instantiateChunkAt(x, z);
+        }
+    }
+    // Tell our existing terrain set that
+    // the "generated terrain zone" at (0,0)
+    // now exists.
+    m_generatedTerrain.insert(toKey(0, 0));
+
+    // Create the basic terrain floor
+    /*for(int x = 0; x < 64; ++x) {
+        for(int z = 0; z < 64; ++z) {
+            if((x + z) % 2 == 0) {
+                setBlockAt(x, 128, z, STONE);
+            }
+            else {
+                setBlockAt(x, 128, z, DIRT);
+            }
+        }
+    }
+    // Add "walls" for collision testing
+    for(int x = 0; x < 64; ++x) {
+        setBlockAt(x, 129, 0, GRASS);
+        setBlockAt(x, 130, 0, GRASS);
+        setBlockAt(x, 129, 63, GRASS);
+        setBlockAt(0, 130, x, GRASS);
+    }
+    // Add a central column
+    for(int y = 129; y < 140; ++y) {
+        setBlockAt(32, y, 32, GRASS);
+    }
+
+    // Create VBO data for newly created chunks
+    for (int x = 0; x < 64; x += 16)
+    {
+        for (int z = 0; z < 64; z += 16)
+        {
+            const uPtr<Chunk> &chunk = getChunkAt(x, z);
+            chunk->createVBOdata();
+        }
+    }*/
+}
+
+void Terrain::expandTerrain(const glm::vec3 &player_pos)
+{
+    for (const glm::ivec2 &n : neighboring_chunks)
+    {
+        if (!hasChunkAt(player_pos.x + n.x, player_pos.z + n.y))
+        {
+            int xFloor = static_cast<int>(glm::floor((player_pos.x + n.x) / 16.f));
+            int zFloor = static_cast<int>(glm::floor((player_pos.z + n.y) / 16.f));
+            instantiateChunkAt(16 * xFloor, 16 * zFloor)->createVBOData();
+
+            // Check if the newly created chunk falls under an existed generated terrain
+            // Create new kew if not
+            xFloor = static_cast<int>(glm::floor((player_pos.x + n.x) / 64.f));
+            zFloor = static_cast<int>(glm::floor((player_pos.z + n.y) / 64.f));
+            int64_t key = toKey(64 * xFloor, 64 * zFloor);
+            if (m_generatedTerrain.find(key) == m_generatedTerrain.end())
+            {
+                m_generatedTerrain.insert(key);
+            }
+        }
+    }
+}
+
+void Terrain::tick(const glm::vec3 &player_pos, float dt)
+{
+    terrain_timer += dt;
+    if (terrain_timer < 0.5f)
+    {
+        return;
+    }
+    tryExpansion(player_pos, this->prev_pos);
+
+    // Send VBO data to the GPU in main thread
+    created_chunks_mutex.lock();
+    for (auto &d : created_chunks)
+    {
+        unsigned int sizeO = d.idxDataOpaque.size();
+        d.chunk->opaque.loadVBOdata(&d.vboDataOpaque, &d.idxDataOpaque, &sizeO);
+        unsigned int sizeT = d.idxDataTransparent.size();
+        d.chunk->transparent.loadVBOdata(&d.vboDataTransparent, &d.idxDataTransparent, &sizeT);
+    }
+    created_chunks.clear();
+    created_chunks_mutex.unlock();
+
+    // set timer back to 0 and set prev_pos if we reach this point
+    terrain_timer = 0;
+    this->prev_pos = player_pos;
+}
+
+void Terrain::tryExpansion(const glm::vec3 &player_pos, const glm::vec3 &prev_pos)
+{
+    // Look at surrounding 5x5 area of terrain generation zones, and
+    // generate the terrain if a zone does not exist
+
+    // First compute the set of 5x5 terrain zones for player's current position
+    // and the player's previous position
+    std::unordered_set<int64_t> curr_rad, prev_rad;
+    for (int x = -64 * CREATE_RADIUS; x <= 64 * CREATE_RADIUS; x += 64)
+    {
+        for (int z = -64 * CREATE_RADIUS; z <= 64 * CREATE_RADIUS; z += 64)
+        {
+            curr_rad.insert(toKey(64 * static_cast<int>(glm::floor((player_pos.x + x) / 64.f)), 64 * static_cast<int>(glm::floor((player_pos.z + z) / 64.f))));
+            prev_rad.insert(toKey(64 * static_cast<int>(glm::floor((prev_pos.x + x) / 64.f)), 64 * static_cast<int>(glm::floor((prev_pos.z + z) / 64.f))));
+        }
+    }
+
+    // Generate new terrain if it does not exist
+    // If it does exist, send to be processed for VBO data
+    for (int64_t key : curr_rad)
+    {
+        glm::ivec2 coords = toCoords(key);
+        int i = 0;
+        if (m_generatedTerrain.find(key) == m_generatedTerrain.end())
+        {
+            // Send chunk data to threads to be processed for blocktype data
+            for (int x = coords.x; x < coords.x + 64; x += 16)
+            {
+                for (int z = coords.y; z < coords.y + 64; z += 16)
+                {
+                    Chunk* c = instantiateChunkAt(x, z);
+                    chunks_needing_generated_mutexes[i].lock();
+                    chunks_needing_generated[i].push_back(c);
+                    chunks_needing_generated_mutexes[i].unlock();
+                    i = (i + 1) % NUM_CORES;
+                }
+            }
+            m_generatedTerrain.insert(key);
+        }
+        else
+        {
+            // Send chunk data to threads to be processed for vbo data
+            for (int x = coords.x; x < coords.x + 64; x += 16)
+            {
+                for (int z = coords.y; z < coords.y + 64; z += 16)
+                {
+                    Chunk* c = getChunkAt(x, z).get();
+                    if (!c->hasVBOData())
+                    {
+                        chunks_needing_created_mutexes[i].lock();
+                        chunks_needing_created[i].push_back(c);
+                        chunks_needing_created_mutexes[i].unlock();
+                        i = (i + 1) % NUM_CORES;
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete VBO data for old terrain, i.e., keys found in PREV and not CURR
+    for (int64_t key : prev_rad)
+    {
+        if (curr_rad.find(key) == curr_rad.end())
+        {
+            deleteTerrain(key);
+        }
+    }
+}
+
+void Terrain::deleteTerrain(int64_t &key)
+{
+    glm::ivec2 coords = toCoords(key);
+    for (int x = coords.x; x < coords.x + 64; x += 16)
+    {
+        for (int z = coords.y; z < coords.y + 64; z += 16)
+        {
+            Chunk* c = getChunkAt(x, z).get();
+            if (c->hasVBOData())
+            {
+                c->destroyVBOdata();
+            }
+        }
+    }
+}
+
+void Terrain::createTerrain()
+{
+
+}
+
+void multithread_work(std::vector<Chunk*>& chunks_to_generate, std::mutex& chunks_to_generate_mutex,
+                      std::vector<Chunk*> &chunks_to_create, std::mutex &chunks_to_create_mutex,
+                      std::vector<ChunkVBOData>& created_chunks, std::mutex& created_chunks_mutex)
+{
+    // Continuously loop, looking for new inputs
+    while (true)
+    {
+        generate_chunks(chunks_to_generate, chunks_to_generate_mutex, chunks_to_create, chunks_to_create_mutex);
+        create_chunks(chunks_to_create, chunks_to_create_mutex, created_chunks, created_chunks_mutex);
+    }
+}
+
+void generate_chunks(std::vector<Chunk*>& chunks_to_generate, std::mutex& chunks_to_generate_mutex,
+                     std::vector<Chunk*>& chunks_to_create, std::mutex& chunks_to_create_mutex)
+{
+    // Generate blocktype data for each chunk in the given input vector
+    chunks_to_generate_mutex.lock();
+    for (Chunk* c : chunks_to_generate)
+    {
+        c->setChunkGenHeights();
+        chunks_to_create_mutex.lock();
+        chunks_to_create.push_back(c);
+        chunks_to_create_mutex.unlock();
+    }
+    chunks_to_generate.clear();
+    chunks_to_generate_mutex.unlock();
+}
+
+
+void create_chunks(std::vector<Chunk*>& chunks_to_create, std::mutex& chunks_to_create_mutex,
+                   std::vector<ChunkVBOData>& created_chunks, std::mutex& created_chunks_mutex)
+{
+    // Generate VBO data for each chunk in the given input vector
+    chunks_to_create_mutex.lock();
+    for (Chunk* c : chunks_to_create)
+    {
+        c->makeDrawableVBOs();
+        ChunkVBOData* c_data = c->sendVBOData();
+
+        created_chunks_mutex.lock();
+        created_chunks.push_back(*c_data);
+        created_chunks_mutex.unlock();
+
+        c->setTrueVBOData();
+    }
+    chunks_to_create.clear();
+    chunks_to_create_mutex.unlock();
+}

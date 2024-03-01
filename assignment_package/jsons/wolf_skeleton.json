@@ -1,0 +1,99 @@
+{
+	"root":
+	{
+		"name": "Hip",
+		"pos": [0, 2, -1.5],
+		"rot": [0, 1, 0, 0],
+		"children": [
+			{
+				"name": "Thigh_R",
+				"pos": [1, -2.5, -0.3],
+				"rot": [0, 1, 0, 0],
+				"children": [
+					{
+						"name": "Ankle_R",
+						"pos": [0.075, -3, 0],
+						"rot": [0, 1, 0, 0],
+						"children": []
+					}
+				]
+			}
+			,
+			{
+				"name": "Thigh_L",
+				"pos": [-1, -2.5, -0.3],
+				"rot": [0, 1, 0, 0],
+				"children": [
+					{
+						"name": "Ankle_L",
+						"pos": [-0.075, -3, 0],
+						"rot": [0, 1, 0, 0],
+						"children": []
+					}
+				]
+			}
+			,
+			{
+				"name": "Spine1",
+				"pos": [0, 0, 3],
+				"rot": [0, 1, 0, 0],
+				"children": [
+					{
+						"name": "Spine2",
+						"pos": [0, 0, 2.5],
+						"rot": [0, 1, 0, 0],
+						"children": [
+							{
+								"name": "Neck",
+								"pos": [0, 0, 1.5],
+								"rot": [0, 1, 0, 0],
+								"children": [
+									{
+										"name": "Head",
+										"pos": [0, 0, 1.5],
+										"rot": [0, 1, 0, 0],
+										"children": []
+									}
+								]
+							}
+							,
+							{
+								"name": "Shoulder_R",
+								"pos": [1, -2.25, 0.75],
+								"rot": [0, 1, 0, 0],
+								"children": [
+									{
+										"name": "Wrist_R",
+										"pos": [-0.05, -3, 0],
+										"rot": [0, 1, 0, 0],
+										"children": []
+									}
+								]
+							}
+							,
+							{
+								"name": "Shoulder_L",
+								"pos": [-1, -2.25, 0.75],
+								"rot": [0, 1, 0, 0],
+								"children": [
+									{
+										"name": "Wrist_L",
+										"pos": [0.05, -3, 0],
+										"rot": [0, 1, 0, 0],
+										"children": []
+									}
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"name": "Tail",
+				"pos": [0, -0.8, -0.8],
+				"rot": [0, 1, 0, 0],
+				"children": []
+			}
+		]
+	}
+}

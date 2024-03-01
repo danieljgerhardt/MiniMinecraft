@@ -1,0 +1,464 @@
+#include "chunk.h"
+#include <iostream>
+#include <ostream>
+
+DrawableChunk::DrawableChunk(OpenGLContext *mp_context)
+    : Drawable(mp_context), ptrsValid(false), vbo(nullptr), idx(nullptr), count(nullptr) {
+
+}
+
+void DrawableChunk::loadVBOdata(std::vector<glm::vec4>* vbo, std::vector<GLuint>* idx, unsigned int* count) {
+    this->vbo = vbo;
+    this->idx = idx;
+    this->count = count;
+    ptrsValid = true;
+
+    createVBOdata();
+}
+
+void DrawableChunk::createVBOdata() {
+    if (!ptrsValid) {
+        throw std::out_of_range("attempting to draw chunk with possibly invalid pointers");
+    }
+
+    // At this point, VBO contains data of the entire chunk
+    m_count = idx->size();
+
+    generateIdx();
+    mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufIdx);
+    mp_context->glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx->size() * sizeof(GLuint), idx->data(), GL_STATIC_DRAW);
+
+    generateInterleaved();
+    mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufInterleaved);
+    mp_context->glBufferData(GL_ELEMENT_ARRAY_BUFFER, vbo->size() * sizeof(glm::vec4), vbo->data(), GL_STATIC_DRAW);
+
+    ptrsValid = false;
+}
+
+Chunk::Chunk(OpenGLContext *mp_context, int x, int z) : m_blocks(), minX(x), minZ(z), m_neighbors{{XPOS, nullptr}, {XNEG, nullptr}, {ZPOS, nullptr}, {ZNEG, nullptr}},
+<<<<<<< HEAD
+    VBODataLoaded(false), chunkData(nullptr), opaque(mp_context), transparent(mp_context)
+=======
+    cData(this), opaque(mp_context), transparent(mp_context)
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+{
+    std::fill_n(m_blocks.begin(), 65536, EMPTY);
+    // this->setChunkGenHeights();
+}  
+
+// Does bounds checking with at()
+BlockType Chunk::getBlockAt(unsigned int x, unsigned int y, unsigned int z) const {
+    return m_blocks.at(x + 16 * y + 16 * 256 * z);
+}
+
+// Exists to get rid of compiler warnings about int -> unsigned int implicit conversion
+BlockType Chunk::getBlockAt(int x, int y, int z) const {
+    return getBlockAt(static_cast<unsigned int>(x), static_cast<unsigned int>(y), static_cast<unsigned int>(z));
+}
+
+// Does bounds checking with at()
+void Chunk::setBlockAt(unsigned int x, unsigned int y, unsigned int z, BlockType t) {
+    m_blocks.at(x + 16 * y + 16 * 256 * z) = t;
+}
+
+
+const static std::unordered_map<Direction, Direction, EnumHash> oppositeDirection {
+    {XPOS, XNEG},
+    {XNEG, XPOS},
+    {YPOS, YNEG},
+    {YNEG, YPOS},
+    {ZPOS, ZNEG},
+    {ZNEG, ZPOS}
+};
+
+// depreciated, delete ?
+const static std::unordered_map<BlockType, glm::vec3, EnumHash> block_color_map {
+    {GRASS, glm::vec3(95.f, 159.f, 53.f) / 255.f},
+    {DIRT, glm::vec3(121.f, 85.f, 58.f) / 255.f},
+    {STONE, glm::vec3(0.5f)},
+    {WATER, glm::vec3(0, 0, 0.75f)},
+    {SNOW, glm::vec3(1, 1, 1)},
+    {LAVA, glm::vec3(1, 0, 0)},
+    {BEDROCK, glm::vec3(0, 0, 0)}
+};
+
+const static std::unordered_map<BlockType, BlockInfo, EnumHash> block_info_map {
+    {EMPTY, {{{XPOS,glm::vec2(13,2)},
+              {XNEG,glm::vec2(13,2)},
+              {YPOS,glm::vec2(13,2)},
+              {YNEG,glm::vec2(13,2)},
+              {ZPOS,glm::vec2(13,2)},
+              {ZNEG,glm::vec2(13,2)}},
+              true, 0.0f
+            }},
+    {GRASS, {{{XPOS,glm::vec2(3,15)},
+              {XNEG,glm::vec2(3,15)},
+              {YPOS,glm::vec2(8,13)},
+              {YNEG,glm::vec2(2,15)},
+              {ZPOS,glm::vec2(3,15)},
+              {ZNEG,glm::vec2(3,15)}},
+              false, 0.0f
+            }},
+    {DIRT, {{{XPOS,glm::vec2(2,15)},
+             {XNEG,glm::vec2(2,15)},
+             {YPOS,glm::vec2(2,15)},
+             {YNEG,glm::vec2(2,15)},
+             {ZPOS,glm::vec2(2,15)},
+             {ZNEG,glm::vec2(2,15)}},
+             false, 0.0f
+            }},
+    {STONE, {{{XPOS,glm::vec2(1,15)},
+              {XNEG,glm::vec2(1,15)},
+              {YPOS,glm::vec2(1,15)},
+              {YNEG,glm::vec2(1,15)},
+              {ZPOS,glm::vec2(1,15)},
+              {ZNEG,glm::vec2(1,15)}},
+              false, 0.0f
+            }},
+    {WATER, {{{XPOS,glm::vec2(14,3)},
+              {XNEG,glm::vec2(14,3)},
+              {YPOS,glm::vec2(14,3)},
+              {YNEG,glm::vec2(14,3)},
+              {ZPOS,glm::vec2(14,3)},
+              {ZNEG,glm::vec2(14,3)}},
+              true, 1.0f
+            }},
+    {SNOW, {{{XPOS,glm::vec2(2,11)},
+             {XNEG,glm::vec2(2,11)},
+             {YPOS,glm::vec2(2,11)},
+             {YNEG,glm::vec2(2,11)},
+             {ZPOS,glm::vec2(2,11)},
+             {ZNEG,glm::vec2(2,11)}},
+             false, 0.0f
+            }},
+    {LAVA, {{{XPOS,glm::vec2(13,1)},
+             {XNEG,glm::vec2(13,1)},
+             {YPOS,glm::vec2(13,1)},
+             {YNEG,glm::vec2(13,1)},
+             {ZPOS,glm::vec2(13,1)},
+             {ZNEG,glm::vec2(13,1)}},
+             false, 1.0f
+            }},
+    {BEDROCK, {{{XPOS,glm::vec2(1,14)},
+                {XNEG,glm::vec2(1,14)},
+                {YPOS,glm::vec2(1,14)},
+                {YNEG,glm::vec2(1,14)},
+                {ZPOS,glm::vec2(1,14)},
+                {ZNEG,glm::vec2(1,14)}},
+                false, 0.0f
+              }},
+    {GLASS, {{{XPOS,glm::vec2(1,12)},
+              {XNEG,glm::vec2(1,12)},
+              {YPOS,glm::vec2(1,12)},
+              {YNEG,glm::vec2(1,12)},
+              {ZPOS,glm::vec2(1,12)},
+              {ZNEG,glm::vec2(1,12)}},
+              true, 0.0f
+            }},
+};
+
+Direction vectorToDirection (glm::vec3 v) {
+    if (v.x == 1) {
+        return XPOS;
+    }
+    if (v.x == -1) {
+        return XNEG;
+    }
+    if (v.y == 1) {
+        return YPOS;
+    }
+    if (v.y == -1) {
+        return YNEG;
+    }
+    if (v.z == 1) {
+        return ZPOS;
+    }
+    return ZNEG;
+}
+
+// Array containing data for adjacent block faces for a block
+// in the form {direction, [pos_array], [nor_array]} for each neighbor
+const static std::array<BlockFace, 6> neighboring_faces {
+    {
+        {
+            glm::vec3(-1, 0, 0),
+            {glm::vec4(0, 0, 0, 1), glm::vec4(0, 0, 1, 1), glm::vec4(0, 1, 1, 1), glm::vec4(0, 1, 0, 1)},
+            {glm::vec4(-1, 0, 0, 0), glm::vec4(-1, 0, 0, 0), glm::vec4(-1, 0, 0, 0), glm::vec4(-1, 0, 0, 0)}
+        },
+
+        {
+            glm::vec3(1, 0, 0),
+            {glm::vec4(1, 0, 1, 1), glm::vec4(1, 0, 0, 1), glm::vec4(1, 1, 0, 1), glm::vec4(1, 1, 1, 1)},
+            {glm::vec4(1, 0, 0, 0), glm::vec4(1, 0, 0, 0), glm::vec4(1, 0, 0, 0), glm::vec4(1, 0, 0, 0)}
+        },
+
+        {
+            glm::vec3(0, -1, 0),
+            {glm::vec4(1, 0, 1, 1), glm::vec4(0, 0, 1, 1), glm::vec4(0, 0, 0, 1), glm::vec4(1, 0, 0, 1)},
+            {glm::vec4(0, -1, 0, 0), glm::vec4(0, -1, 0, 0), glm::vec4(0, -1, 0, 0), glm::vec4(0, -1, 0, 0)}
+        },
+
+        {
+            glm::vec3(0, 1, 0),
+            {glm::vec4(1, 1, 0, 1), glm::vec4(0, 1, 0, 1), glm::vec4(0, 1, 1, 1), glm::vec4(1, 1, 1, 1)},
+            {glm::vec4(0, 1, 0, 0), glm::vec4(0, 1, 0, 0), glm::vec4(0, 1, 0, 0), glm::vec4(0, 1, 0, 0)}
+        },
+
+        {
+            glm::vec3(0, 0, -1),
+            {glm::vec4(1, 0, 0, 1), glm::vec4(0, 0, 0, 1), glm::vec4(0, 1, 0, 1), glm::vec4(1, 1, 0, 1)},
+            {glm::vec4(0, 0, -1, 0), glm::vec4(0, 0, -1, 0), glm::vec4(0, 0, -1, 0), glm::vec4(0, 0, -1, 0)}
+        },
+
+        {
+            glm::vec3(0, 0, 1),
+            {glm::vec4(0, 0, 1, 1), glm::vec4(1, 0, 1, 1), glm::vec4(1, 1, 1, 1), glm::vec4(0, 1, 1, 1)},
+            {glm::vec4(0, 0, 1, 0), glm::vec4(0, 0, 1, 0), glm::vec4(0, 0, 1, 0), glm::vec4(0, 0, 1, 0)}
+        }
+    }
+};
+
+const static std::array<glm::vec2, 4> uv_offsets {
+    glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)
+};
+
+void Chunk::linkNeighbor(uPtr<Chunk> &neighbor, Direction dir) {
+    if(neighbor != nullptr) {
+        this->m_neighbors[dir] = neighbor.get();
+        neighbor->m_neighbors[oppositeDirection.at(dir)] = this;
+    }
+}
+
+//------------------------
+//
+// vbo format: position, normal, uv (as vec2), animation flag (as float), empty (const -1)
+//
+//------------------------
+
+
+// Populates the VBO's for the chunk
+void Chunk::createVBOData()
+{
+    VBODataLoaded = true;
+    // Our VBO to be passed to the GPU.
+    // It is in an interleaved format:
+    // vbo = {pos0col0nor0uv0 pos1col1nor1uv1 ...}
+    std::vector<glm::vec4> vboOpaque;
+    std::vector<GLuint> idxOpaque;
+    std::vector<glm::vec4> vboTransparent;
+    std::vector<GLuint> idxTransparent;
+
+    unsigned int v_countOpaque = -1; // A counter to keep track of how many vertices actually exist. It is the index of the last vertex.
+    unsigned int v_countTransparent = -1;
+
+    for (int z = 0; z < 16; z++)
+    {
+        for (int y = 0; y < 256; y++)
+        {
+            for (int x = 0; x < 16; x++)
+            {
+                BlockType type = getBlockAt(x,y,z);
+                // We only want to draw non-empty blocks
+                if (type != EMPTY)
+                {
+
+                    BlockInfo info = block_info_map.at(type);
+
+                    std::vector<glm::vec4>& vbo = (info.transparent) ? vboTransparent : vboOpaque;
+                    std::vector<GLuint>& idx = (info.transparent) ? idxTransparent : idxOpaque;
+                    unsigned int& v_count = (info.transparent) ? v_countTransparent : v_countOpaque;
+
+                    // Iterate over the neighbors of this block
+                    for (auto &n : neighboring_faces)
+                    {
+                        BlockType neighbor;
+                        getNeighbor(x, y, z, n, neighbor);
+
+
+                        // Only need to draw if neighbor is transparent
+                        if (block_info_map.at(neighbor).transparent && neighbor != type)
+                        {
+                            // First position, then normal, then UV
+                            for (int i = 0; i < 4; i++)
+                            {
+<<<<<<< HEAD
+                                vbo.push_back(glm::vec4(minX + x, y, minZ + z, 0) + n.pos[i]);
+                                //glm::vec4 pos = glm::vec4(x, y, z, 0) + n.pos[i];
+                                //vbo.push_back(pos);
+                                // color push back, is depreciated should be deleted
+                                vbo.push_back(glm::vec4(0,0,0, 1));
+=======
+                                glm::vec4 pos = glm::vec4(x, y, z, 0) + n.pos[i];
+                                vbo.push_back(pos);
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+                                glm::vec4 nor = n.nor[i];
+                                vbo.push_back(nor);
+                                glm::vec2 uv = info.uv_map.at(vectorToDirection(n.direction));
+                                uv += uv_offsets[i];
+                                uv /= 16.0f;
+                                vbo.push_back(glm::vec4(uv,info.animated,-1));
+                                v_count++;
+                            }
+
+                            // Triangulate the index buffer
+                            for (int i = v_count - 2; i < v_count; i++)
+                            {
+                                idx.push_back(v_count-3);
+                                idx.push_back(i);
+                                idx.push_back(i+1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+<<<<<<< HEAD
+    chunkData = mkU<ChunkVBOData>(this);
+    chunkData->idxDataOpaque = idxOpaque;
+    chunkData->vboDataOpaque = vboOpaque;
+    chunkData->idxDataTransparent = idxTransparent;
+    chunkData->vboDataTransparent = vboTransparent;
+=======
+    opaque.loadVBOdata(&vboOpaque,&idxOpaque,&v_countOpaque);
+    transparent.loadVBOdata(&vboTransparent,&idxTransparent,&v_countTransparent);
+    cData.idxDataOpaque = idxOpaque;
+    cData.idxDataTransparent = idxTransparent;
+    cData.vboDataOpaque = vboOpaque;
+    cData.vboDataTransparent = vboTransparent;
+>>>>>>> 1184c41dfc4545309cfbb928635199c23e7d8148
+}
+
+// Takes in an interleaved VBO vbo and the index data,
+// and buffers them into the appropriate indexed VBO's for
+// position, color, and normal
+
+// not updated for uv interleaving, unsure if need to implement
+//void Chunk::unravelVBO(std::vector<glm::vec4> &vbo, std::vector<GLuint> &idx,
+//                       std::vector<glm::vec4> &pos, std::vector<glm::vec4> &col, std::vector<glm::vec4> &nor, std::vector<glm::vec4>& uv)
+//{
+//    // Reminder: vbo = {pos_i col_i nor_i}
+//    for (int i = 0; i < vbo.size(); i += 4)
+//    {
+//        pos.push_back(vbo[i]);
+//        col.push_back(vbo[i+1]);
+//        nor.push_back(vbo[i+2]);
+//        uv.push_back(vbo[i+3]);
+//    }
+//}
+
+const ChunkVBOData* Chunk::getVBOData() const {
+    return &cData;
+}
+
+void Chunk::destroyVBOData() {
+    opaque.destroyVBOdata();
+    transparent.destroyVBOdata();
+    cData = ChunkVBOData(this);
+}
+
+void Chunk::resetVBOData() {
+    destroyVBOData();
+    createVBOData();
+}
+
+// Helper function for obtaining the neighbor at position (x, y, z) in local chunk space
+void Chunk::getNeighbor(int x, int y, int z, const BlockFace &n, BlockType &neighbor)
+{
+    if (x == 0 && n.direction.x == -1)
+    {
+        neighbor = (m_neighbors[XNEG] != nullptr) ? m_neighbors[XNEG]->getBlockAt(15, y, z) : EMPTY;
+    }
+    else if (x == 15 && n.direction.x == 1)
+    {
+        neighbor = (m_neighbors[XPOS] != nullptr) ? m_neighbors[XPOS]->getBlockAt(0, y, z) : EMPTY;
+    }
+    else if (z == 0 && n.direction.z == -1)
+    {
+        neighbor = (m_neighbors[ZNEG] != nullptr) ? m_neighbors[ZNEG]->getBlockAt(x, y, 15) : EMPTY;
+    }
+    else if (z == 15 && n.direction.z == 1)
+    {
+        neighbor = (m_neighbors[ZPOS] != nullptr) ? m_neighbors[ZPOS]->getBlockAt(x, y, 0) : EMPTY;
+    }
+    else if ((y == 0 && n.direction.y == -1) || (y == 255 && n.direction.y == 1))
+    {
+        neighbor = EMPTY;
+    }
+    else
+    {
+        neighbor = getBlockAt((int)(x + n.direction.x), (int)(y + n.direction.y), (int)(z + n.direction.z));
+    }
+}
+
+glm::ivec2 Chunk::getMinPos() {
+    return glm::ivec2(this->minX, this->minZ);
+}
+
+BlockType Chunk::getBlockByBiome(float height, bool onTop, BiomeType b) {
+    if (height <= 128) return BlockType::STONE;
+    if (b == GRASSLANDS) {
+        return onTop ? BlockType::GRASS : BlockType::DIRT;
+    } else if (b == MOUNTAINS) {
+        //switch to snow
+        return height > 200 && onTop ? BlockType::SNOW : BlockType::STONE;
+    }
+    return BlockType::EMPTY;
+}
+
+void Chunk::setChunkGenHeights() {
+    glm::vec2 pos = this->getMinPos();
+    for (int x = 0; x < 16; x++) {
+        for (int z = 0; z < 16; z++) {
+            std::pair<int, BiomeType> pair = TerrainGen::getHeight(glm::vec2(pos.x + x, pos.y + z));
+            int height = pair.first;
+            BiomeType b = pair.second;
+            for (int y = 1; y <= height; y++) {
+                BlockType type = getBlockByBiome(height, y == height, b);
+                this->setBlockAt(x, y, z, type);
+                //cave range
+                if (y < 150 && y > 100) {
+                    float perlin3D = TerrainGen::perlinNoise3D(glm::vec3(pos.x + x, y, pos.y + z) / 25.f);
+
+                    // "Floor" height of terrain is about 128
+                    // Want Perlin value to increase closer to surface so caves are smaller
+                    perlin3D += pow(glm::smoothstep(100.f, 130.f, (float)y), 2) * 0.3;
+
+                    //cave limit of perlin val
+                    if (perlin3D < 0.f) {
+                        //25 -- above is empty, below is lava
+                        this->setBlockAt(x, y, z, y > 25 ? BlockType::EMPTY : BlockType::LAVA);
+                    }
+                }
+            }
+            //make water pools from [128, 138)
+            if (height >= 127 && this->getBlockAt(x, height, z) != BlockType::EMPTY) {
+                for (int y = height + 1; y < 138; y++) {
+                    if (this->getBlockAt(x, y, z) == BlockType::EMPTY) {
+                        this->setBlockAt(x, y, z, BlockType::WATER);
+                    }
+                }
+            }
+            this->setBlockAt(x, 0, z, BlockType::BEDROCK);
+        }
+    }
+}
+
+void Chunk::destroyVBOdata() {
+    opaque.destroyVBOdata();
+    transparent.destroyVBOdata();
+    VBODataLoaded = false;
+}
+
+bool Chunk::hasVBOData() const {
+    return VBODataLoaded;
+}
+
+void Chunk::setTrueVBOData() {
+    VBODataLoaded = true;
+}
+
+ChunkVBOData* Chunk::sendVBOData() {
+    return chunkData.get();
+}

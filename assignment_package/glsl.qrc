@@ -1,0 +1,17 @@
+<RCC>
+    <qresource prefix="/">
+        <file>glsl/lambert.frag.glsl</file>
+        <file>glsl/lambert.vert.glsl</file>
+        <file>glsl/flat.frag.glsl</file>
+        <file>glsl/flat.vert.glsl</file>
+        <file>glsl/instanced.vert.glsl</file>
+        <file>glsl/passthrough.vert.glsl</file>
+        <file>glsl/water.frag.glsl</file>
+        <file>glsl/noop.frag.glsl</file>
+        <file>glsl/lava.frag.glsl</file>
+        <file>glsl/skeleton.vert.glsl</file>
+        <file>glsl/skeleton.frag.glsl</file>
+        <file>glsl/gui.vert.glsl</file>
+        <file>glsl/gui.frag.glsl</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,8 @@
+Ian
+Office hours throughout the assignment
+
+Daniel
+OH on 11/14: Adam helped me to create a smoother zip up of caves at higher y's
+
+Tyler
+Went to OH on 11/20 for questions about multithreading. Mostly made sure that my implementation was fine and asked some higher level questions about hardware limitations.
