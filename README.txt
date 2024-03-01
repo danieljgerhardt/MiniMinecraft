@@ -6,7 +6,7 @@ The program will run super slowly if it is greater than the number of cores in y
 
 # MILESTONE 1 #
 
-Tyler Basile - Efficient Rendering
+Efficient Rendering
 
 I made extensive use of static objects for cleaner code. 
 
@@ -18,7 +18,7 @@ I had a little bit of trouble with the index buffer, but I soon realized my logi
 
 ---
 
-**Ian Lamont - Game Engine/Player Physics**
+**Game Engine/Player Physics**
 
 - game engine is used to process inputs and pass them to the player object using a switch case
 	- inputs are later handled in `processInputs` of the player that applies acceleration
@@ -38,13 +38,13 @@ Most implementations were pretty standard, not much to say about them.
 
 ---
 
-Daniel - Procedural Biome generation. The mountains are using worley noise raised to a slightly higher power to raise jaggedness. The Worley function uses 2nd min dist - 1st min dist as advised in the paper linked in the write up. The grasslands use a mix of perlin, worley, and fbm that are scaled to provide variety. The implementation uses a terrain gen class with static functions that are called by the chunk in the constructor to set block heights and type.
+Procedural Biome generation. The mountains are using worley noise raised to a slightly higher power to raise jaggedness. The Worley function uses 2nd min dist - 1st min dist as advised in the paper linked in the write up. The grasslands use a mix of perlin, worley, and fbm that are scaled to provide variety. The implementation uses a terrain gen class with static functions that are called by the chunk in the constructor to set block heights and type.
 
 ---
 
 # MILESTONE 2 #
 
-Ian Lamont - Texturing and Animation
+Texturing and Animation
 
 I reworked the way Chunks are drawn so that they contain two DrawableChunks, one for the opaque blocks and one for the transparent blocks. This allowed me to not have to edit the Drawable class to contain transparent and opaque VBOs and just draw the opaque DrawableChunk followed by the transparent DrawableChunk. Additionally, Chunk contains much of the interface of a Drawable still to make it easier for my group mates. Additionally I use the ChunkVBOData to package data to send to multithreading. For UV and animation I added a new vec4 into the interleaved vbo data so to that i can hold the vec2 for UV coordinates and a float for if it is animated or not (it was just easier to push another vec4 than to mess with pushing different types to the vbo data). Also for animating I used the u_Time uniform variable to offset the uv cooridinate of water and lava every couple of seconds so that it becomes animated.
 
@@ -56,7 +56,7 @@ The water and lava post process effects were made using the framebuffer class an
 
 ---
 
-Tyler Basile - Multithreading
+Multithreading
 
 Multithreading is implemented using C++'s std::thread and std::mutex. We create a thread for each core in the user's CPU (they will have to change this global variable themselves in terrain.h), which are stored in an array. Each thread does both the work for generating chunks and creating VBO data for chunks in the multithread_work() function. Each thread continuously looks for data in its respective input vector for chunks that need to be generated and chunks that need VBO data. When generating chunks, each thread pushes the chunk for VBO data creation to the next thread (modulo the number of cores). 
 
@@ -66,7 +66,7 @@ The main thread populates the input vectors for the threads by checking if we ar
 
 # MILESTONE 3 #
 
-Ian Lamont - Saving/Loading
+Saving/Loading
 
 Building off of the multithreading system, I built a system for saving and loading. Loading pulls from the saves directory where each save is its own directory containing a main save file with the player position, the world seed, and the set of all chunks that have been saved, the directory also conains a file for each saved chunk which is a serialization of the chunks blocktype data. Chunks are only saved if they are modified. saving and loading of chunks occurs in the mulithreaded terrain generation. Chunks that are known to have saved data (as given by the main save file) are loaded from disk otherwise they are generated like normal. additionally chunks will only now have their VBO data generated when all their neighbors are generated (so you dont ever make faces that are not nessicary depending on block type). at the end of the program all modified chunks are saved before the game closes and all the threads are joined (to avoid any segfaults). for saving and loading I also added some quality of life features like a "main menu" which allows you to create a new game with a specific seed or load an old game, then wait until all the terrain is loaded to start playing. this required remaking some of the multitrheading aspects so that the main thread knows when the worker threads are done their jobs.
 Most of the challenges in this section came from visual erros that were coming up because of draw order as well as learning more about QT to make the main menu.
@@ -74,10 +74,28 @@ refrences: https://en.cppreference.com/w/cpp/thread, qt docs
 
 ---
 
-Ian Lamont - GUI/"inventory"
+GUI/"inventory"
 
 I built an on screen overlay within the MyGL object to display a simple GUI made of a hotbar and a crosshair. the GUI is drawn after the post process passes so that it is drawn the same way always no mater the effect. The hot bar displays the current block the player is "holding" so that they know what they are placing. the crosshair adds a visual indicator to where exactly the player is looking.
 The challenges I encountered while making this were just remembering all the opengl things i needed to do because i had spent so long in multithreading world before this part as well as remering how to make all the textures draw correctly with UVs
 refrences: slides
+
+---
+
+Wolf
+
+Custom AI and Skeleton Shader from MiniMaya project
+
+---
+
+Growing SDF Trees with L System randomization
+
+Trees that grow based on L Systems with randomization and turtle using capsule SDF
+
+---
+
+Volcano Biome
+
+Worley Noise volcano biomes using interpolation on height to add smooth blending
 
 
